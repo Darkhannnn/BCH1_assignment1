@@ -1,5 +1,6 @@
 import time
 from hashing import hash
+from rsa import sign, verify
 
 class Blockchain:
     def __init__(self):
@@ -12,18 +13,43 @@ class Blockchain:
             previous_hash = self.chain[-1].hash if self.chain else '0'
             block_index = len(self.chain) + 1
             new_block = Block(block_index, timestamp, self.current_transactions[:10], previous_hash)
-            self.chain.append(new_block)
-            self.current_transactions = self.current_transactions[10:]
+            if self.validate_block(new_block):
+                self.chain.append(new_block)
+                self.current_transactions = self.current_transactions[10:]
+            else:
+                print("Error")
 
-    def new_transaction(self, sender, receiver, amount):
-        self.current_transactions.append({
-            'sender': sender,
-            'receiver': receiver,
+    def new_transaction(self, sender_private_key, sender_public_key, receiver_public_key, amount):
+        transaction = {
+            'sender': sender_public_key,
+            'receiver': receiver_public_key,
             'amount': amount
-        })
+        }
+        transaction_signature = sign(sender_private_key, str(transaction))
+        transaction['signature'] = transaction_signature
+        self.current_transactions.append(transaction)
+
+    def verify_transaction(transaction):
+        sender_public_key = transaction['sender']
+        signature = transaction['signature']
+
+        document = {k: transaction[k] for k in transaction if k != 'signature'}
+        document_string = str(document)
+
+        decrypted_signature = ''.join(
+            [chr(pow(char, sender_public_key[0], sender_public_key[1])) for char in signature]
+        )
         
-        if len(self.current_transactions) >= 10:
-            self.mine_block()
+        hashed_document = hash(document_string)
+
+        if decrypted_signature != hashed_document:
+            raise ValueError("Signature is wrong")
+
+        if hash(document_string) != decrypted_signature:
+            raise ValueError("Document is wrong")
+
+        return True
+
 
     def mine_block(self):
         self.add_block(timestamp=int(time.time()))
@@ -33,6 +59,13 @@ class Blockchain:
             if self.chain[i].previous_hash != self.chain[i-1].hash:
                 return False
         return True
+    
+    def validate_block(self, new_block):
+        if self.chain and new_block.previous_hash != self.chain[-1].hash:
+            return False
+
+        return True
+
 
 class Block:
     def __init__(self, index, timestamp, transactions, previous_hash='0'):
